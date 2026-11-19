@@ -4,8 +4,8 @@ import {
   onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  initializeFirestore, persistentLocalCache, collection, doc, updateDoc,
-  deleteDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp, runTransaction
+  initializeFirestore, persistentLocalCache, collection, doc, setDoc, updateDoc,
+  deleteDoc, onSnapshot, serverTimestamp, deleteField
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -13,9 +13,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 
+// ---------- Yardımcılar ----------
 const kok = document.getElementById("uygulama");
 const para = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" });
-const tarihYaz = (t) => t ? new Date(t.seconds ? t.seconds * 1000 : t).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" }) : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const sayi = (v) => {
   if (typeof v === "number") return isFinite(v) ? v : 0;
@@ -25,33 +25,86 @@ const sayi = (v) => {
   const n = parseFloat(s);
   return isFinite(n) ? n : 0;
 };
-const sayiYaz = (n) => n ? String(n).replace(".", ",") : "";
+const sayiYaz = (n) => n ? String(Math.round(n * 100) / 100).replace(".", ",") : "";
+const sn = (t) => t?.seconds ? t.seconds * 1000 : (typeof t === "number" ? t : 0);
+const tarihYaz = (t) => sn(t) ? new Date(sn(t)).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" }) : "";
+const kisaTarih = (t) => sn(t) ? new Date(sn(t)).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) : "";
+const kucuk = (s) => String(s || "").toLocaleLowerCase("tr");
+const sirala = (a, b) => (a.sira ?? 999) - (b.sira ?? 999) || String(a.ad).localeCompare(b.ad, "tr");
+const yeniId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const BIRIMLER = ["adet", "kg", "gr", "lt", "paket", "kutu", "demet"];
+const ODEMELER = { nakit: "Nakit", banka: "Banka kartı", kredi: "Kredi kartı", kart: "Kart" };
+const MAGAZA_TURLERI = { market: "Market", pazar: "Pazar", firin: "Fırın", kasap: "Kasap", eczane: "Eczane", kirtasiye: "Kırtasiye", diger: "Diğer" };
+
+// ---------- Varsayılan veriler (ilk açılışta bir kez) ----------
+const VARSAYILAN_KATEGORILER = [
+  ["meyve-sebze", "Meyve - Sebze"], ["et", "Et - Tavuk - Balık"], ["sut", "Süt - Kahvaltılık"],
+  ["temel", "Temel Gıda"], ["unlu", "Unlu Mamul"], ["icecek", "İçecek"], ["atistirmalik", "Atıştırmalık"],
+  ["temizlik", "Temizlik"], ["bakim", "Kişisel Bakım"], ["kirtasiye", "Kırtasiye - Kitap"],
+  ["bebek", "Bebek"], ["ev", "Ev Eşyası"], ["diger", "Diğer"]
+];
+const VARSAYILAN_URUNLER = {
+  "meyve-sebze": [["Elma", "kg"], ["Muz", "kg"], ["Portakal", "kg"], ["Domates", "kg"], ["Salatalık", "kg"], ["Patates", "kg"], ["Soğan", "kg"], ["Biber", "kg"], ["Limon", "kg"], ["Maydanoz", "demet"]],
+  "et": [["Kıyma", "kg"], ["Kuşbaşı", "kg"], ["Tavuk", "kg"], ["Balık", "kg"]],
+  "sut": [["Süt", "lt"], ["Yoğurt", "kg"], ["Beyaz peynir", "kg"], ["Kaşar peyniri", "kg"], ["Yumurta", "adet"], ["Zeytin", "kg"], ["Tereyağı", "paket"], ["Bal", "kutu"], ["Reçel", "kutu"]],
+  "temel": [["Un", "kg"], ["Şeker", "kg"], ["Tuz", "paket"], ["Pirinç", "kg"], ["Bulgur", "kg"], ["Makarna", "paket"], ["Mercimek", "kg"], ["Nohut", "kg"], ["Ayçiçek yağı", "lt"], ["Zeytinyağı", "lt"], ["Salça", "kutu"], ["Çay", "paket"]],
+  "unlu": [["Ekmek", "adet"], ["Simit", "adet"], ["Pide", "adet"]],
+  "icecek": [["Su", "adet"], ["Maden suyu", "adet"], ["Meyve suyu", "lt"]],
+  "atistirmalik": [["Bisküvi", "paket"], ["Kuruyemiş", "kg"]],
+  "temizlik": [["Çamaşır deterjanı", "adet"], ["Bulaşık deterjanı", "adet"], ["Bulaşık makinesi tableti", "paket"], ["Yüzey temizleyici", "adet"], ["Çamaşır suyu", "adet"], ["Tuvalet kağıdı", "paket"], ["Kağıt havlu", "paket"], ["Çöp poşeti", "paket"]],
+  "bakim": [["Diş macunu", "adet"], ["Şampuan", "adet"], ["Sabun", "adet"], ["Diş fırçası", "adet"]],
+  "kirtasiye": [["Defter", "adet"], ["Kalem", "adet"], ["Kitap", "adet"], ["Silgi", "adet"]],
+  "bebek": [["Bebek bezi", "paket"], ["Islak mendil", "paket"]],
+  "ev": [["Ampul", "adet"], ["Pil", "paket"]],
+  "diger": []
+};
 
 let kullanici = null;
-let listeler = [];
+let veri = { alisveris: [], urunKategorileri: [], urunler: [], magazalar: [] };
+let yuklendi = {};
+let sekme = "listeler";
 let acikListeId = null;
-let hata = "";
-let dinleyici = null;
 let yeniOlusturulan = null;
+let hata = "";
+let dinleyiciler = [];
+let tohumlandi = false;
+let sunucudan = {};
 
 // ---------- Giriş ----------
 onAuthStateChanged(auth, (u) => {
   kullanici = u;
-  if (dinleyici) { dinleyici(); dinleyici = null; }
+  dinleyiciler.forEach((d) => d()); dinleyiciler = [];
+  veri = { alisveris: [], urunKategorileri: [], urunler: [], magazalar: [] };
+  yuklendi = {}; sunucudan = {};
   if (!u) { cizGiris(); return; }
-  const q = query(collection(db, "alisveris"), orderBy("olusturma", "desc"));
-  dinleyici = onSnapshot(q, (snap) => {
-    hata = "";
-    listeler = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    ciz();
-  }, (e) => {
-    hata = e.code === "permission-denied"
-      ? "Bu listeye erişim izniniz yok. Lütfen izin verilen Gmail hesabıyla giriş yapın."
-      : "Bağlantı hatası: " + e.message;
-    ciz();
-  });
+  for (const ad of Object.keys(veri)) {
+    dinleyiciler.push(onSnapshot(collection(db, ad), (s) => {
+      veri[ad] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      yuklendi[ad] = true; hata = "";
+      if (!s.metadata?.fromCache) sunucudan[ad] = true; // önbellekten gelen boş liste yanıltmasın
+      tohumla(); ciz();
+    }, (e) => {
+      hata = e.code === "permission-denied"
+        ? "Bu listeye erişim izniniz yok. Lütfen izin verilen Gmail hesabıyla giriş yapın."
+        : "Bağlantı hatası: " + e.message;
+      ciz();
+    }));
+  }
   ciz();
 });
+
+function tohumla() {
+  if (tohumlandi || !sunucudan.urunKategorileri || !sunucudan.urunler || !sunucudan.magazalar) return;
+  tohumlandi = true;
+  if (!veri.urunKategorileri.length && !veri.urunler.length) {
+    VARSAYILAN_KATEGORILER.forEach(([id, ad], i) => {
+      setDoc(doc(db, "urunKategorileri", id), { ad, sira: i }).catch(() => {});
+      (VARSAYILAN_URUNLER[id] || []).forEach(([uad, birim]) =>
+        setDoc(doc(db, "urunler", "v_" + id + "_" + kucuk(uad).replace(/[^a-z0-9çğıöşü]+/g, "-")), { ad: uad, kategoriId: id, birim }).catch(() => {}));
+    });
+  }
+  if (!veri.magazalar.length) setDoc(doc(db, "magazalar", "pazar"), { ad: "Pazar yeri", tur: "pazar" }).catch(() => {});
+}
 
 async function girisYap() {
   const saglayici = new GoogleAuthProvider();
@@ -77,63 +130,201 @@ function cizGiris() {
   document.getElementById("giris").onclick = girisYap;
 }
 
-// ---------- Hesaplamalar ----------
+// ---------- Veri yardımcıları ----------
+const kategoriler = () => [...veri.urunKategorileri].sort(sirala);
+const kategoriAdi = (id) => veri.urunKategorileri.find((k) => k.id === id)?.ad || "Diğer";
+const magazalar = () => [...veri.magazalar].sort(sirala);
+const magazaAdi = (id, yedek) => veri.magazalar.find((m) => m.id === id)?.ad || yedek || "";
+const urun = (id) => veri.urunler.find((u) => u.id === id);
+// Kalemler belgede "k" alanında kimlik → kalem eşlemesi olarak durur. Her kalem ayrı alan
+// olarak yazıldığı için iki kişi aynı anda düzenlese de birbirini ezmez ve internet yokken de çalışır.
+const kalemListesi = (l) => l.k ? Object.values(l.k).sort((a, b) => (a.sira ?? 0) - (b.sira ?? 0)) : (l.kalemler || []).map((x, i) => ({ id: x.id || "e" + i, sira: i, ...x }));
 const kalemTutari = (k) => sayi(k.fiyat) * (sayi(k.adet) || 1);
-const listeToplami = (l) => (l.kalemler || []).filter((k) => k.alindi).reduce((t, k) => t + kalemTutari(k), 0);
+const listeToplami = (l) => kalemListesi(l).filter((k) => k.alindi).reduce((t, k) => t + kalemTutari(k), 0);
+const bitenler = () => veri.alisveris.filter((l) => l.durum === "bitti").sort((a, b) => sn(b.bitis) - sn(a.bitis));
 
-function kaydet(liste, degisiklik) {
-  return updateDoc(doc(db, "alisveris", liste.id), degisiklik).catch((e) => alert("Kaydedilemedi: " + e.message));
+function fiyatGecmisi(urunId, adi) {
+  const out = [];
+  for (const l of bitenler()) for (const k of kalemListesi(l)) {
+    if (k.alindi && sayi(k.fiyat) && (urunId ? k.urunId === urunId : kucuk(k.ad) === kucuk(adi))) {
+      out.push({ tarih: l.bitis, magaza: l.magazaAd || magazaAdi(l.magazaId) || k.magaza || "", fiyat: sayi(k.fiyat), birim: k.birim });
+    }
+  }
+  return out;
 }
-const yeniId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-// İki kişi aynı anda düzenlese de değişiklikler birbirini ezmesin diye en güncel listeye uygulanır.
-function kalemleriGuncelle(liste, fn) {
-  const ref = doc(db, "alisveris", liste.id);
-  return runTransaction(db, async (t) => {
-    const s = await t.get(ref);
-    if (!s.exists()) return;
-    if (s.data().durum === "bitti") throw new Error("Bu alışveriş bitmiş.");
-    t.update(ref, { kalemler: fn(s.data().kalemler || []) });
-  }).catch((e) => alert("Kaydedilemedi: " + e.message));
+
+function hataGoster(e) { alert("Kaydedilemedi: " + e.message); }
+
+function eskiyiTasi(l) {
+  // Eski sürümdeki dizi biçimini yeni biçime çevirir.
+  if (l.k || !l.kalemler) return {};
+  const k = {};
+  kalemListesi(l).forEach((x) => { k[x.id] = x; });
+  return { k, kalemler: deleteField() };
 }
+function kalemKaydet(l, kalem) {
+  const tasima = eskiyiTasi(l);
+  const deg = tasima.k ? { ...tasima, k: { ...tasima.k, [kalem.id]: kalem } } : { ["k." + kalem.id]: kalem };
+  return updateDoc(doc(db, "alisveris", l.id), deg).catch(hataGoster);
+}
+function kalemSil(l, kalem) {
+  const tasima = eskiyiTasi(l);
+  if (tasima.k) { delete tasima.k[kalem.id]; return updateDoc(doc(db, "alisveris", l.id), tasima).catch(hataGoster); }
+  return updateDoc(doc(db, "alisveris", l.id), { ["k." + kalem.id]: deleteField() }).catch(hataGoster);
+}
+const yeniKalem = (u) => ({ id: yeniId(), sira: Date.now(), urunId: u.id, ad: u.ad, kategoriId: u.kategoriId || "", birim: u.birim || "adet", adet: 1, fiyat: 0, alindi: false });
 
 // ---------- Ekranlar ----------
 function ciz() {
   if (!kullanici) return cizGiris();
-  const liste = listeler.find((l) => l.id === acikListeId);
-  if (acikListeId && liste) cizListe(liste);
-  else if (acikListeId && acikListeId === yeniOlusturulan) kok.innerHTML = `<p class="bos">Yükleniyor…</p>`;
-  else { acikListeId = null; cizAna(); }
+  const liste = veri.alisveris.find((l) => l.id === acikListeId);
+  if (acikListeId && liste) return cizListe(liste);
+  if (acikListeId && acikListeId === yeniOlusturulan) { kok.innerHTML = `<p class="bos">Yükleniyor…</p>`; return; }
+  acikListeId = null;
+  const icerik = hata ? `<div class="hata">${esc(hata)}</div>`
+    : !yuklendi.alisveris ? `<p class="bos">Yükleniyor…</p>`
+    : sekme === "listeler" ? ekranListeler() : sekme === "urunler" ? ekranUrunler() : ekranMarketler();
+  kok.innerHTML = `
+    <header><h1>Alışveriş Listesi</h1><button id="cikis">Çıkış</button></header>
+    <main>
+      <div class="sekmeler">
+        <button data-s="listeler" class="${sekme === "listeler" ? "secili" : ""}">Listeler</button>
+        <button data-s="urunler" class="${sekme === "urunler" ? "secili" : ""}">Ürünler</button>
+        <button data-s="marketler" class="${sekme === "marketler" ? "secili" : ""}">Marketler</button>
+      </div>
+      ${icerik}
+    </main>
+    ${hata ? "" : `<button class="yuzen" id="yeni" aria-label="Ekle">+</button>`}`;
+  document.getElementById("cikis").onclick = () => signOut(auth);
+  kok.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => { sekme = b.dataset.s; ciz(); });
+  const yeni = document.getElementById("yeni");
+  if (yeni) yeni.onclick = () => sekme === "listeler" ? yeniListe() : sekme === "urunler" ? urunPenceresi(null) : magazaPenceresi(null);
+  kok.querySelectorAll("[data-liste]").forEach((el) => el.onclick = () => { acikListeId = el.dataset.liste; ciz(); window.scrollTo(0, 0); });
+  kok.querySelectorAll("[data-urun]").forEach((el) => el.onclick = () => urunPenceresi(urun(el.dataset.urun)));
+  kok.querySelectorAll("[data-kategori]").forEach((el) => el.onclick = () => kategoriPenceresi(veri.urunKategorileri.find((k) => k.id === el.dataset.kategori)));
+  kok.querySelectorAll("[data-magaza]").forEach((el) => el.onclick = () => magazaPenceresi(veri.magazalar.find((m) => m.id === el.dataset.magaza)));
+  const kEkle = document.getElementById("kategori-ekle");
+  if (kEkle) kEkle.onclick = () => kategoriPenceresi(null);
 }
 
-function cizAna() {
-  const aciklar = listeler.filter((l) => l.durum !== "bitti");
-  const bitenler = listeler.filter((l) => l.durum === "bitti");
+function ekranListeler() {
+  const aciklar = veri.alisveris.filter((l) => l.durum !== "bitti").sort((a, b) => sn(b.olusturma) - sn(a.olusturma));
+  const biten = bitenler();
+  const ay = new Date(); const buAy = biten.filter((l) => { const d = new Date(sn(l.bitis)); return d.getMonth() === ay.getMonth() && d.getFullYear() === ay.getFullYear(); });
   const ogesi = (l) => {
-    const kalemler = l.kalemler || [];
+    const kalemler = kalemListesi(l);
     const alinan = kalemler.filter((k) => k.alindi).length;
+    const yer = l.magazaAd || magazaAdi(l.magazaId);
     return `
-    <div class="kart liste-ogesi satir" data-id="${l.id}">
+    <div class="kart liste-ogesi satir" data-liste="${l.id}">
       <div class="esnek">
         <div class="kalin">${esc(l.ad)}</div>
         <div class="soluk">${l.durum === "bitti"
-          ? `${tarihYaz(l.bitis)} · ${l.odeme === "kart" ? "Kart" : "Nakit"}`
-          : `${alinan}/${kalemler.length} ürün alındı`}</div>
+          ? `${kisaTarih(l.bitis)}${yer ? " · " + esc(yer) : ""} · ${ODEMELER[l.odeme] || "Nakit"}`
+          : `${alinan}/${kalemler.length} ürün alındı${yer ? " · " + esc(yer) : ""}`}</div>
       </div>
       <div class="tutar kalin">${para.format(l.durum === "bitti" ? (l.toplam || 0) : listeToplami(l))}</div>
     </div>`;
   };
+  return `
+    ${buAy.length ? `<div class="kart satir"><div class="esnek soluk">${esc(ay.toLocaleDateString("tr-TR", { month: "long" }))} ayı alışverişleri (${buAy.length})</div>
+      <div class="kalin tutar">${para.format(buAy.reduce((t, l) => t + sayi(l.toplam), 0))}</div></div>` : ""}
+    <h2>Açık listeler</h2>
+    ${aciklar.length ? aciklar.map(ogesi).join("") : `<div class="bos">Açık liste yok. Yeni liste için + düğmesine basın.</div>`}
+    ${biten.length ? `<h2>Biten alışverişler</h2>${biten.slice(0, 40).map(ogesi).join("")}` : ""}`;
+}
+
+function ekranUrunler() {
+  const kats = kategoriler();
+  const kimsesiz = veri.urunler.filter((u) => !veri.urunKategorileri.some((k) => k.id === u.kategoriId));
+  const grup = (k, liste) => `
+    <h2 class="satir"><span class="esnek">${esc(k ? k.ad : "Kategorisiz")}</span>${k ? `<button class="ikincil kucuk" data-kategori="${k.id}">Düzenle</button>` : ""}</h2>
+    ${liste.length ? `<div class="kart tablo">${liste.sort(sirala).map((u) => `
+      <div class="satir liste-ogesi" data-urun="${u.id}">
+        <div class="esnek"><div>${esc(u.ad)}</div>
+          ${u.sonFiyat ? `<div class="soluk">Son: ${para.format(u.sonFiyat)}/${esc(u.birim || "adet")}${u.sonMagaza ? " · " + esc(u.sonMagaza) : ""}</div>` : ""}</div>
+        <span class="soluk">${esc(u.birim || "adet")}</span>
+      </div>`).join("")}</div>` : `<div class="soluk" style="padding:0 6px 6px">Bu kategoride ürün yok.</div>`}`;
+  return `
+    <p class="soluk" style="margin:0 4px 6px">Kategoriler genel listedir, altındakiler ayrıntılı ürünlerdir. Ürün eklemek için + düğmesine basın.</p>
+    ${kats.map((k) => grup(k, veri.urunler.filter((u) => u.kategoriId === k.id))).join("")}
+    ${kimsesiz.length ? grup(null, kimsesiz) : ""}
+    <button class="ikincil tam" id="kategori-ekle" style="margin-top:14px">+ Yeni kategori</button>`;
+}
+
+function ekranMarketler() {
+  const biten = bitenler();
+  const ms = magazalar();
+  return `
+    ${ms.length ? ms.map((m) => {
+      const alis = biten.filter((l) => l.magazaId === m.id);
+      const top = alis.reduce((t, l) => t + sayi(l.toplam), 0);
+      return `
+      <div class="kart satir liste-ogesi" data-magaza="${m.id}">
+        <div class="esnek"><div class="kalin">${esc(m.ad)}</div>
+          <div class="soluk">${MAGAZA_TURLERI[m.tur] || "Market"}${alis.length ? ` · ${alis.length} alışveriş · son ${kisaTarih(alis[0].bitis)}` : ""}</div></div>
+        <div class="tutar kalin">${alis.length ? para.format(top) : ""}</div>
+      </div>`;
+    }).join("") : `<div class="bos">Henüz market yok. Eklemek için + düğmesine basın.</div>`}
+    <p class="soluk" style="padding:0 4px">Tutarlar o yerden yapılan tüm alışverişlerin toplamıdır.</p>`;
+}
+
+// ---------- Liste ekranı ----------
+function cizListe(l) {
+  const bitti = l.durum === "bitti";
+  const kalemler = kalemListesi(l);
+  const alinacak = kalemler.filter((k) => !k.alindi);
+  const alinan = kalemler.filter((k) => k.alindi);
+  const yer = l.magazaAd || magazaAdi(l.magazaId);
+  const katSira = (id) => { const k = veri.urunKategorileri.find((x) => x.id === id); return k ? (k.sira ?? 500) : 999; };
+  const gruplu = (ks) => {
+    const gruplar = {};
+    ks.forEach((k) => (gruplar[k.kategoriId || ""] ||= []).push(k));
+    return Object.keys(gruplar).sort((a, b) => katSira(a) - katSira(b)).map((kid) => `
+      <div class="grup-baslik">${esc(kid ? kategoriAdi(kid) : "Diğer")}</div>
+      ${gruplar[kid].map(satir).join("")}`).join("");
+  };
+  const satir = (k) => `
+    <div class="kart satir ${k.alindi ? "alindi" : ""}">
+      <input type="checkbox" class="kutu" data-k="${esc(k.id)}" ${k.alindi ? "checked" : ""} ${bitti ? "disabled" : ""}>
+      <div class="esnek kalem" data-k="${esc(k.id)}">
+        <div class="ad kalin">${esc(k.ad)} <span class="soluk">${esc(sayiYaz(sayi(k.adet) || 1))} ${esc(k.birim || "adet")}</span></div>
+        ${k.not ? `<div class="soluk">${esc(k.not)}</div>` : ""}
+        ${k.alindi && sayi(k.fiyat) ? `<div class="soluk">${para.format(sayi(k.fiyat))} / ${esc(k.birim || "adet")}</div>` : ""}
+      </div>
+      <div class="tutar">${k.alindi && sayi(k.fiyat) ? para.format(kalemTutari(k)) : ""}</div>
+    </div>`;
   kok.innerHTML = `
-    <header><h1>Alışveriş Listesi</h1><button id="cikis">Çıkış</button></header>
+    <header><button id="geri">‹</button><h1>${esc(l.ad)}</h1>${bitti ? "" : `<button id="menu">⋯</button>`}</header>
     <main>
-      ${hata ? `<div class="hata">${esc(hata)}</div>` : ""}
-      <h2>Açık listeler</h2>
-      ${aciklar.length ? aciklar.map(ogesi).join("") : `<div class="bos">Açık liste yok. Yeni liste için + düğmesine basın.</div>`}
-      ${bitenler.length ? `<h2>Biten alışverişler</h2>${bitenler.map(ogesi).join("")}` : ""}
+      ${bitti ? `<div class="kart"><span class="rozet">Bitti</span>
+          <div class="soluk" style="margin-top:6px">${tarihYaz(l.bitis)}${yer ? " · " + esc(yer) : ""} · ${ODEMELER[l.odeme] || "Nakit"} · ${esc(l.bitiren || "")}</div>
+          <div class="toplam" style="margin-top:6px">${para.format(l.toplam || 0)}</div></div>`
+        : yer ? `<div class="soluk" style="margin:0 4px 8px">📍 ${esc(yer)}</div>` : ""}
+      ${!kalemler.length ? `<div class="bos">Liste boş. Ürün eklemek için + düğmesine basın.</div>` : ""}
+      ${alinacak.length ? (bitti ? `<h2>Alınmayanlar</h2>` : "") + gruplu(alinacak) : ""}
+      ${alinan.length ? `<h2>Alınanlar</h2>${alinan.map(satir).join("")}` : ""}
+      ${!bitti && kalemler.length ? `
+        <div class="kart" style="margin-top:14px">
+          <div class="satir"><div class="esnek soluk">Alınanların toplamı</div><div class="toplam tutar">${para.format(listeToplami(l))}</div></div>
+          <button class="tam" id="bitir" style="margin-top:12px" ${alinan.length ? "" : "disabled"}>Alışverişi bitir</button>
+        </div>` : ""}
     </main>
-    <button class="yuzen" id="yeni" aria-label="Yeni liste">+</button>`;
-  document.getElementById("cikis").onclick = () => signOut(auth);
-  document.getElementById("yeni").onclick = yeniListe;
-  kok.querySelectorAll(".liste-ogesi").forEach((el) => el.onclick = () => { acikListeId = el.dataset.id; ciz(); window.scrollTo(0, 0); });
+    ${bitti ? "" : `<button class="yuzen" id="ekle" aria-label="Ürün ekle">+</button>`}`;
+
+  document.getElementById("geri").onclick = () => { acikListeId = null; ciz(); };
+  if (bitti) return;
+  const bul = (key) => kalemler.find((k) => k.id === key);
+  document.getElementById("ekle").onclick = () => urunSecici(l);
+  document.getElementById("menu").onclick = () => listeMenusu(l);
+  const bitir = document.getElementById("bitir");
+  if (bitir) bitir.onclick = () => bitirPenceresi(l);
+  kok.querySelectorAll("input.kutu").forEach((el) => el.onchange = () => {
+    const k = bul(el.dataset.k);
+    if (el.checked) { el.checked = false; kalemPenceresi(l, k, true); return; }
+    kalemKaydet(l, { ...k, alindi: false });
+  });
+  kok.querySelectorAll(".kalem").forEach((el) => el.onclick = () => kalemPenceresi(l, bul(el.dataset.k)));
 }
 
 function yeniListe() {
@@ -142,118 +333,124 @@ function yeniListe() {
     <h3>Yeni liste</h3>
     <label>Liste adı</label>
     <input id="ad" value="${esc(varsayilan)}">
+    <label>Nereden alışveriş yapılacak? (sonra da seçilebilir)</label>
+    ${magazaSec("magaza", "")}
     <div class="dugmeler"><button class="ikincil" data-kapat>Vazgeç</button><button id="tamam">Oluştur</button></div>`,
   (p, kapat) => {
-    p.querySelector("#tamam").onclick = async () => {
+    p.querySelector("#tamam").onclick = () => {
       const ad = p.querySelector("#ad").value.trim() || varsayilan;
+      const magazaId = p.querySelector("#magaza").value;
       kapat();
       const ref = doc(collection(db, "alisveris"));
       acikListeId = yeniOlusturulan = ref.id; ciz();
       setDoc(ref, {
-        ad, durum: "acik", kalemler: [], olusturma: serverTimestamp(),
-        olusturan: kullanici.displayName || kullanici.email
-      }).catch((e) => { acikListeId = null; ciz(); alert("Liste oluşturulamadı: " + e.message); });
+        ad, durum: "acik", k: {}, magazaId, magazaAd: magazaAdi(magazaId),
+        olusturma: serverTimestamp(), olusturan: kullanici.displayName || kullanici.email
+      }).catch((e) => { acikListeId = null; ciz(); hataGoster(e); });
+      setTimeout(() => urunSecici({ id: ref.id, k: {} }), 150);
     };
   });
 }
 
-function cizListe(l) {
-  const bitti = l.durum === "bitti";
-  const kalemler = l.kalemler || [];
-  const sirali = kalemler.map((k, i) => ({ ...k, i })).sort((a, b) => (a.alindi ? 1 : 0) - (b.alindi ? 1 : 0));
-  kok.innerHTML = `
-    <header><button id="geri">‹ Geri</button><h1>${esc(l.ad)}</h1>${bitti ? "" : `<button id="menu">⋯</button>`}</header>
-    <main>
-      ${bitti ? `<div class="kart"><span class="rozet">Bitti</span>
-          <div class="soluk" style="margin-top:6px">${tarihYaz(l.bitis)} · ${l.odeme === "kart" ? "Kartla ödendi" : "Nakit ödendi"} · ${esc(l.bitiren || "")}</div>
-          <div class="toplam" style="margin-top:6px">${para.format(l.toplam || 0)}</div></div>` : ""}
-      ${kalemler.length ? sirali.map((k) => `
-        <div class="kart satir ${k.alindi ? "alindi" : ""}">
-          <input type="checkbox" class="kutu" data-i="${k.i}" ${k.alindi ? "checked" : ""} ${bitti ? "disabled" : ""}>
-          <div class="esnek kalem" data-i="${k.i}">
-            <div class="ad kalin">${esc(k.ad)}${sayi(k.adet) > 1 ? ` <span class="soluk">× ${esc(sayiYaz(k.adet))}</span>` : ""}</div>
-            ${k.magaza ? `<div class="soluk">${esc(k.magaza)}</div>` : ""}
-          </div>
-          <div class="tutar">${sayi(k.fiyat) ? para.format(kalemTutari(k)) : `<span class="soluk">—</span>`}</div>
-        </div>`).join("") : `<div class="bos">Liste boş. Ürün eklemek için + düğmesine basın.</div>`}
-      ${!bitti ? `
-        <div class="kart">
-          <div class="satir"><div class="esnek soluk">Alınanların toplamı</div><div class="toplam tutar">${para.format(listeToplami(l))}</div></div>
-          <button class="tam" id="bitir" style="margin-top:12px" ${kalemler.some((k) => k.alindi) ? "" : "disabled"}>Alışverişi bitir</button>
-        </div>` : ""}
-    </main>
-    ${bitti ? "" : `<button class="yuzen" id="ekle" aria-label="Ürün ekle">+</button>`}`;
-
-  document.getElementById("geri").onclick = () => { acikListeId = null; ciz(); };
-  if (bitti) return;
-  document.getElementById("ekle").onclick = () => kalemPenceresi(l, null);
-  document.getElementById("bitir").onclick = () => bitirPenceresi(l);
-  document.getElementById("menu").onclick = () => listeMenusu(l);
-  kok.querySelectorAll("input.kutu").forEach((el) => el.onchange = () => {
-    const i = +el.dataset.i;
-    const k = kalemler[i];
-    if (el.checked && !sayi(k.fiyat)) { el.checked = false; kalemPenceresi(l, i, true); return; }
-    const alindi = el.checked;
-    kalemleriGuncelle(l, (ks) => ks.map((x) => (x.id ? x.id === k.id : x.ad === k.ad) ? { ...x, alindi } : x));
-  });
-  kok.querySelectorAll(".kalem").forEach((el) => el.onclick = () => kalemPenceresi(l, +el.dataset.i));
+function magazaSec(id, secili, bosYazi = "Henüz belli değil") {
+  return `<select id="${id}"><option value="">${esc(bosYazi)}</option>${magazalar().map((m) =>
+    `<option value="${m.id}" ${m.id === secili ? "selected" : ""}>${esc(m.ad)}</option>`).join("")}</select>`;
 }
 
-function kalemPenceresi(l, i, alinacak = false) {
-  const kalemler = l.kalemler || [];
-  const k = i === null ? { ad: "", adet: 1, fiyat: "", magaza: "", alindi: false } : kalemler[i];
-  const magazalar = [...new Set(listeler.flatMap((x) => (x.kalemler || []).map((y) => y.magaza)).filter(Boolean))];
+// Katalogdan ürün seçme: aranır, dokununca listeye eklenir, pencere açık kalır.
+function urunSecici(l) {
+  let aranan = "";
   pencere(`
-    <h3>${i === null ? "Ürün ekle" : alinacak ? "Fiyatı girin" : "Ürünü düzenle"}</h3>
-    <label>Ürün</label><input id="ad" value="${esc(k.ad)}" placeholder="ör. Süt">
-    <div class="satir">
-      <div class="esnek"><label>Adet / miktar</label><input id="adet" inputmode="decimal" value="${esc(sayiYaz(k.adet))}"></div>
-      <div class="esnek"><label>Birim fiyat (₺)</label><input id="fiyat" inputmode="decimal" value="${esc(sayiYaz(k.fiyat))}" placeholder="0,00"></div>
-    </div>
-    <label>Nereden</label><input id="magaza" list="magazalar" value="${esc(k.magaza)}" placeholder="ör. BİM, pazar">
-    <datalist id="magazalar">${magazalar.map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
-    ${i === null ? "" : `<label style="display:flex;gap:10px;align-items:center;color:inherit;margin-top:14px"><input type="checkbox" class="kutu" id="alindi" ${k.alindi || alinacak ? "checked" : ""}> Alındı</label>`}
-    <div class="dugmeler">
-      ${i === null ? `<button class="ikincil" data-kapat>Vazgeç</button>` : `<button class="tehlike" id="sil">Sil</button>`}
-      <button id="tamam">Kaydet</button>
-    </div>`,
+    <div class="satir"><h3 class="esnek">Ürün ekle</h3><button class="ikincil" data-kapat>Bitti</button></div>
+    <input id="ara" placeholder="Ürün ara ya da yeni ürün yaz" autocomplete="off" style="margin-top:10px">
+    <div id="sonuc" style="margin-top:8px"></div>`,
   (p, kapat) => {
-    const odak = alinacak ? p.querySelector("#fiyat") : p.querySelector("#ad");
-    setTimeout(() => odak.focus(), 50);
+    const guncel = () => veri.alisveris.find((x) => x.id === l.id) || l;
+    const mevcut = () => kalemListesi(guncel());
+    const yaz = () => {
+      const q = kucuk(aranan.trim());
+      const varIds = new Set(mevcut().map((k) => k.urunId).filter(Boolean));
+      const uygun = veri.urunler.filter((u) => !q || kucuk(u.ad).includes(q));
+      const tamEslesme = veri.urunler.some((u) => kucuk(u.ad) === q);
+      let html = "";
+      if (q && !tamEslesme) html += `<button class="tam" id="yeni-urun" style="margin-bottom:10px">+ “${esc(aranan.trim())}” yeni ürün olarak ekle</button>`;
+      for (const k of kategoriler()) {
+        const us = uygun.filter((u) => u.kategoriId === k.id).sort(sirala);
+        if (!us.length) continue;
+        html += `<div class="grup-baslik">${esc(k.ad)}</div><div class="cipler">${us.map((u) =>
+          `<button class="cip ${varIds.has(u.id) ? "secili" : ""}" data-u="${u.id}">${varIds.has(u.id) ? "✓ " : ""}${esc(u.ad)}</button>`).join("")}</div>`;
+      }
+      if (!html) html = `<div class="bos">Ürün bulunamadı.</div>`;
+      const sonuc = p.querySelector("#sonuc");
+      sonuc.innerHTML = html;
+      sonuc.querySelectorAll("[data-u]").forEach((b) => b.onclick = () => {
+        const u = urun(b.dataset.u);
+        const var_ = mevcut().find((x) => x.urunId === u.id && !x.alindi);
+        if (varIds.has(u.id)) { if (var_) kalemSil(guncel(), var_); }
+        else kalemKaydet(guncel(), yeniKalem(u));
+        setTimeout(yaz, 120);
+      });
+      const yu = sonuc.querySelector("#yeni-urun");
+      if (yu) yu.onclick = () => urunPenceresi({ ad: aranan.trim() }, (u) => {
+        kalemKaydet(guncel(), yeniKalem(u));
+        aranan = ""; p.querySelector("#ara").value = ""; setTimeout(yaz, 150);
+      });
+    };
+    p.querySelector("#ara").oninput = (e) => { aranan = e.target.value; yaz(); };
+    yaz();
+  });
+}
+
+function kalemPenceresi(l, k, alinacak = false) {
+  if (!k) return;
+  const u = k.urunId ? urun(k.urunId) : null;
+  const gecmis = fiyatGecmisi(k.urunId, k.ad).slice(0, 4);
+  const onerilen = sayi(k.fiyat) || (u?.sonFiyat ?? 0);
+  pencere(`
+    <h3>${esc(k.ad)}</h3>
+    <div class="satir">
+      <div class="esnek"><label>Miktar</label><input id="adet" inputmode="decimal" value="${esc(sayiYaz(sayi(k.adet) || 1))}"></div>
+      <div class="esnek"><label>Birim</label><select id="birim">${BIRIMLER.map((b) => `<option ${b === (k.birim || "adet") ? "selected" : ""}>${b}</option>`).join("")}</select></div>
+    </div>
+    <label>Birim fiyat (₺)</label><input id="fiyat" inputmode="decimal" value="${esc(sayiYaz(onerilen))}" placeholder="0,00">
+    <div class="soluk" id="ara-toplam" style="margin-top:6px"></div>
+    ${gecmis.length ? `<div class="soluk" style="margin-top:8px">Önceki fiyatlar: ${gecmis.map((g) => `${para.format(g.fiyat)} (${esc(g.magaza || "?")}, ${kisaTarih(g.tarih)})`).join(" · ")}</div>` : ""}
+    <label>Not</label><input id="not" value="${esc(k.not || "")}" placeholder="ör. büyük boy, X marka">
+    <label class="onay"><input type="checkbox" class="kutu" id="alindi" ${k.alindi || alinacak ? "checked" : ""}> Aldım</label>
+    <div class="dugmeler"><button class="tehlike" id="sil">Listeden çıkar</button><button id="tamam">${alinacak ? "Aldım" : "Kaydet"}</button></div>`,
+  (p, kapat) => {
+    const guncelle = () => {
+      const t = sayi(p.querySelector("#fiyat").value) * (sayi(p.querySelector("#adet").value) || 1);
+      p.querySelector("#ara-toplam").textContent = t ? "Tutar: " + para.format(t) : "";
+    };
+    p.querySelector("#fiyat").oninput = guncelle; p.querySelector("#adet").oninput = guncelle; guncelle();
+    if (alinacak) setTimeout(() => { const f = p.querySelector("#fiyat"); f.focus(); f.select(); }, 60);
     p.querySelector("#tamam").onclick = () => {
-      const ad = p.querySelector("#ad").value.trim();
-      if (!ad) { p.querySelector("#ad").focus(); return; }
-      const yeniKalem = {
-        id: k.id || yeniId(),
-        ad,
-        adet: sayi(p.querySelector("#adet").value) || 1,
-        fiyat: sayi(p.querySelector("#fiyat").value),
-        magaza: p.querySelector("#magaza").value.trim(),
-        alindi: i === null ? false : p.querySelector("#alindi").checked
-      };
+      const alindi = p.querySelector("#alindi").checked;
+      const fiyat = sayi(p.querySelector("#fiyat").value);
+      if (alindi && !fiyat && !confirm("Fiyat girmediniz. Fiyatsız olarak işaretlensin mi?")) return;
+      const yeni = { ...k, adet: sayi(p.querySelector("#adet").value) || 1, birim: p.querySelector("#birim").value, fiyat, not: p.querySelector("#not").value.trim(), alindi };
       kapat();
-      kalemleriGuncelle(l, (ks) => i === null ? [...ks, yeniKalem] : ks.map((x) => (x.id ? x.id === k.id : x.ad === k.ad) ? yeniKalem : x));
+      kalemKaydet(l, yeni);
     };
-    const sil = p.querySelector("#sil");
-    if (sil) sil.onclick = () => {
-      if (!confirm(`"${k.ad}" silinsin mi?`)) return;
-      kapat();
-      kalemleriGuncelle(l, (ks) => ks.filter((x) => !(x.id ? x.id === k.id : x.ad === k.ad)));
-    };
+    p.querySelector("#sil").onclick = () => { kapat(); kalemSil(l, k); };
   });
 }
 
 function bitirPenceresi(l) {
   const toplam = listeToplami(l);
-  const alinmayan = (l.kalemler || []).filter((k) => !k.alindi).length;
-  let odeme = "kart";
+  const alinmayan = kalemListesi(l).filter((k) => !k.alindi).length;
+  let odeme = "nakit";
   pencere(`
     <h3>Alışverişi bitir</h3>
     <div class="soluk">Alınan ürünlerin toplamı</div>
-    <div class="toplam" style="margin:4px 0 14px">${para.format(toplam)}</div>
-    ${alinmayan ? `<div class="uyari">${alinmayan} ürün alınmadı olarak işaretli. Bunlar toplama katılmaz.</div>` : ""}
+    <div class="toplam" style="margin:4px 0 10px">${para.format(toplam)}</div>
+    ${alinmayan ? `<div class="uyari">${alinmayan} ürün alınmadı. Bunlar toplama katılmaz.</div>` : ""}
+    <label>Nereden alındı?</label>
+    ${magazaSec("magaza", l.magazaId, "Seçin…")}
+    <input id="yeni-magaza" placeholder="Listede yoksa yeni yer adı yazın" style="margin-top:8px">
     <label>Ödeme şekli</label>
-    <div class="secenekler"><button data-o="nakit">Nakit</button><button data-o="kart" class="secili">Kart</button></div>
+    <div class="secenekler">${["nakit", "banka", "kredi"].map((o) => `<button data-o="${o}" class="${o === odeme ? "secili" : ""}">${ODEMELER[o]}</button>`).join("")}</div>
     <div class="dugmeler"><button class="ikincil" data-kapat>Vazgeç</button><button id="tamam">Bitir</button></div>`,
   (p, kapat) => {
     p.querySelectorAll("[data-o]").forEach((b) => b.onclick = () => {
@@ -261,36 +458,155 @@ function bitirPenceresi(l) {
       p.querySelectorAll("[data-o]").forEach((x) => x.classList.toggle("secili", x === b));
     });
     p.querySelector("#tamam").onclick = () => {
+      let magazaId = p.querySelector("#magaza").value;
+      const yeniAd = p.querySelector("#yeni-magaza").value.trim();
+      if (!magazaId && !yeniAd) { alert("Alışverişin nereden yapıldığını seçin ya da yazın."); return; }
+      if (yeniAd) {
+        const ref = doc(collection(db, "magazalar"));
+        magazaId = ref.id;
+        setDoc(ref, { ad: yeniAd, tur: /pazar/i.test(yeniAd) ? "pazar" : "market" }).catch(hataGoster);
+      }
+      const magazaAd = yeniAd || magazaAdi(magazaId);
+      const magazaTur = yeniAd ? (/pazar/i.test(yeniAd) ? "pazar" : "market") : (veri.magazalar.find((m) => m.id === magazaId)?.tur || "market");
       kapat();
-      const ref = doc(db, "alisveris", l.id);
-      runTransaction(db, async (t) => {
-        const s = await t.get(ref);
-        if (!s.exists() || s.data().durum === "bitti") return;
-        const guncel = listeToplami(s.data());
-        t.update(ref, {
-          durum: "bitti", odeme, toplam: Math.round(guncel * 100) / 100,
-          bitis: serverTimestamp(), bitiren: kullanici.displayName || kullanici.email
-        });
-      }).catch((e) => alert("Kaydedilemedi: " + e.message));
+      const guncel = veri.alisveris.find((x) => x.id === l.id) || l;
+      const alinanlar = kalemListesi(guncel).filter((k) => k.alindi);
+      updateDoc(doc(db, "alisveris", l.id), {
+        durum: "bitti", odeme, magazaId, magazaAd, magazaTur,
+        toplam: Math.round(listeToplami(guncel) * 100) / 100,
+        bitis: serverTimestamp(), bitiren: kullanici.displayName || kullanici.email
+      }).catch(hataGoster);
+      // Ürünlerin son fiyatını güncelle
+      for (const k of alinanlar) if (k.urunId && sayi(k.fiyat) && urun(k.urunId)) {
+        updateDoc(doc(db, "urunler", k.urunId), { sonFiyat: sayi(k.fiyat), sonMagaza: magazaAd, birim: k.birim || "adet" }).catch(() => {});
+      }
     };
   });
 }
 
 function listeMenusu(l) {
   pencere(`
-    <h3>${esc(l.ad)}</h3>
+    <h3>Liste ayarları</h3>
     <label>Liste adı</label><input id="ad" value="${esc(l.ad)}">
+    <label>Nereden</label>${magazaSec("magaza", l.magazaId)}
     <div class="dugmeler"><button class="tehlike" id="sil">Listeyi sil</button><button id="tamam">Kaydet</button></div>`,
   (p, kapat) => {
     p.querySelector("#tamam").onclick = () => {
-      const ad = p.querySelector("#ad").value.trim();
+      const ad = p.querySelector("#ad").value.trim() || l.ad;
+      const magazaId = p.querySelector("#magaza").value;
       kapat();
-      if (ad && ad !== l.ad) kaydet(l, { ad });
+      updateDoc(doc(db, "alisveris", l.id), { ad, magazaId, magazaAd: magazaAdi(magazaId) }).catch(hataGoster);
     };
     p.querySelector("#sil").onclick = async () => {
       if (!confirm("Bu liste tamamen silinsin mi?")) return;
-      kapat(); acikListeId = null;
-      try { await deleteDoc(doc(db, "alisveris", l.id)); } catch (e) { alert("Silinemedi: " + e.message); }
+      kapat(); acikListeId = null; ciz();
+      deleteDoc(doc(db, "alisveris", l.id)).catch(hataGoster);
+    };
+  });
+}
+
+// ---------- Katalog pencereleri ----------
+function urunPenceresi(u, sonra) {
+  const yeni = !u?.id;
+  u = { ad: "", kategoriId: kategoriler()[0]?.id || "", birim: "adet", ...u };
+  const gecmis = yeni ? [] : fiyatGecmisi(u.id, u.ad).slice(0, 6);
+  pencere(`
+    <h3>${yeni ? "Yeni ürün" : "Ürünü düzenle"}</h3>
+    <label>Ürün adı</label><input id="ad" value="${esc(u.ad)}" placeholder="ör. Elma">
+    <label>Kategori</label><select id="kategori">${kategoriler().map((k) => `<option value="${k.id}" ${k.id === u.kategoriId ? "selected" : ""}>${esc(k.ad)}</option>`).join("")}</select>
+    <label>Birim</label><select id="birim">${BIRIMLER.map((b) => `<option ${b === u.birim ? "selected" : ""}>${b}</option>`).join("")}</select>
+    ${gecmis.length ? `<h2 style="margin-left:0">Fiyat geçmişi</h2>${gecmis.map((g) => `<div class="satir soluk"><span class="esnek">${kisaTarih(g.tarih)} · ${esc(g.magaza)}</span><span class="tutar">${para.format(g.fiyat)}/${esc(g.birim || u.birim)}</span></div>`).join("")}` : ""}
+    <div class="dugmeler">
+      ${yeni ? `<button class="ikincil" data-kapat>Vazgeç</button>` : `<button class="tehlike" id="sil">Sil</button>`}
+      <button id="tamam">Kaydet</button>
+    </div>`,
+  (p, kapat) => {
+    if (yeni) setTimeout(() => p.querySelector("#ad").focus(), 60);
+    p.querySelector("#tamam").onclick = () => {
+      const ad = p.querySelector("#ad").value.trim();
+      if (!ad) { p.querySelector("#ad").focus(); return; }
+      const v = { ad, kategoriId: p.querySelector("#kategori").value, birim: p.querySelector("#birim").value };
+      kapat();
+      const ref = yeni ? doc(collection(db, "urunler")) : doc(db, "urunler", u.id);
+      (yeni ? setDoc(ref, v) : updateDoc(ref, v)).catch(hataGoster);
+      if (sonra) sonra({ id: ref.id, ...v });
+    };
+    const sil = p.querySelector("#sil");
+    if (sil) sil.onclick = () => {
+      if (!confirm(`"${u.ad}" ürünü silinsin mi? Geçmiş alışverişler etkilenmez.`)) return;
+      kapat(); deleteDoc(doc(db, "urunler", u.id)).catch(hataGoster);
+    };
+  });
+}
+
+function kategoriPenceresi(k) {
+  const yeni = !k;
+  k = k || { ad: "" };
+  pencere(`
+    <h3>${yeni ? "Yeni kategori" : "Kategoriyi düzenle"}</h3>
+    <label>Kategori adı</label><input id="ad" value="${esc(k.ad)}" placeholder="ör. Kırtasiye">
+    ${yeni ? "" : `<div class="satir" style="margin-top:12px"><button class="ikincil esnek" id="yukari">▲ Yukarı</button><button class="ikincil esnek" id="asagi">▼ Aşağı</button></div>`}
+    <div class="dugmeler">
+      ${yeni ? `<button class="ikincil" data-kapat>Vazgeç</button>` : `<button class="tehlike" id="sil">Sil</button>`}
+      <button id="tamam">Kaydet</button>
+    </div>`,
+  (p, kapat) => {
+    p.querySelector("#tamam").onclick = () => {
+      const ad = p.querySelector("#ad").value.trim();
+      if (!ad) return;
+      kapat();
+      if (yeni) setDoc(doc(collection(db, "urunKategorileri")), { ad, sira: veri.urunKategorileri.length }).catch(hataGoster);
+      else updateDoc(doc(db, "urunKategorileri", k.id), { ad }).catch(hataGoster);
+    };
+    const tasi = (yon) => {
+      const s = kategoriler(); const i = s.findIndex((x) => x.id === k.id); const j = i + yon;
+      if (j < 0 || j >= s.length) return;
+      [s[i], s[j]] = [s[j], s[i]];
+      s.forEach((x, n) => { if (x.sira !== n) updateDoc(doc(db, "urunKategorileri", x.id), { sira: n }).catch(() => {}); });
+    };
+    if (!yeni) {
+      p.querySelector("#yukari").onclick = () => tasi(-1);
+      p.querySelector("#asagi").onclick = () => tasi(1);
+      p.querySelector("#sil").onclick = () => {
+        if (veri.urunler.some((u) => u.kategoriId === k.id)) { alert("Bu kategoride ürünler var. Önce ürünleri başka kategoriye taşıyın ya da silin."); return; }
+        if (!confirm(`"${k.ad}" kategorisi silinsin mi?`)) return;
+        kapat(); deleteDoc(doc(db, "urunKategorileri", k.id)).catch(hataGoster);
+      };
+    }
+  });
+}
+
+function magazaPenceresi(m) {
+  const yeni = !m;
+  m = m || { ad: "", tur: "market", adres: "" };
+  let tur = m.tur || "market";
+  pencere(`
+    <h3>${yeni ? "Yeni market / yer" : "Düzenle"}</h3>
+    <label>Adı</label><input id="ad" value="${esc(m.ad)}" placeholder="ör. BİM Meram, Salı pazarı">
+    <label>Türü</label>
+    <div class="cipler">${Object.entries(MAGAZA_TURLERI).map(([k, v]) => `<button class="cip ${k === tur ? "secili" : ""}" data-t="${k}">${v}</button>`).join("")}</div>
+    <label>Adres / not</label><input id="adres" value="${esc(m.adres || "")}" placeholder="isteğe bağlı">
+    <div class="dugmeler">
+      ${yeni ? `<button class="ikincil" data-kapat>Vazgeç</button>` : `<button class="tehlike" id="sil">Sil</button>`}
+      <button id="tamam">Kaydet</button>
+    </div>`,
+  (p, kapat) => {
+    p.querySelectorAll("[data-t]").forEach((b) => b.onclick = () => {
+      tur = b.dataset.t;
+      p.querySelectorAll("[data-t]").forEach((x) => x.classList.toggle("secili", x === b));
+    });
+    p.querySelector("#tamam").onclick = () => {
+      const ad = p.querySelector("#ad").value.trim();
+      if (!ad) return;
+      const v = { ad, tur, adres: p.querySelector("#adres").value.trim() };
+      kapat();
+      if (yeni) setDoc(doc(collection(db, "magazalar")), v).catch(hataGoster);
+      else updateDoc(doc(db, "magazalar", m.id), v).catch(hataGoster);
+    };
+    const sil = p.querySelector("#sil");
+    if (sil) sil.onclick = () => {
+      if (!confirm(`"${m.ad}" silinsin mi? Geçmiş alışverişlerde adı kalır.`)) return;
+      kapat(); deleteDoc(doc(db, "magazalar", m.id)).catch(hataGoster);
     };
   });
 }
