@@ -39,6 +39,7 @@ const MAGAZA_TURLERI = { market: "Market", pazar: "Pazar", firin: "Fırın", kas
 // ---------- Hazır katalog ----------
 // Katalog sürümü artınca eksik kategori ve ürünler mevcut veritabanına da bir kez eklenir.
 const KATALOG_SURUMU = 2;
+const SURUM = "4";
 const VARSAYILAN_KATEGORILER = [
   ["meyve-sebze", "Meyve - Sebze", 0], ["et", "Et - Tavuk - Balık", 1], ["sut", "Süt - Kahvaltılık", 2],
   ["temel", "Temel Gıda", 3], ["baharat", "Baharat - Sos", 3.5], ["unlu", "Unlu Mamul", 4], ["icecek", "İçecek", 5],
@@ -110,7 +111,8 @@ onAuthStateChanged(auth, (u) => {
   yuklendi = {}; sunucudan = {};
   if (!u) { cizGiris(); return; }
   for (const ad of Object.keys(veri)) {
-    dinleyiciler.push(onSnapshot(collection(db, ad), (s) => {
+    // includeMetadataChanges: önbellekteki veri sunucudakiyle aynı olsa da "sunucudan geldi" bilgisini alabilmek için
+    dinleyiciler.push(onSnapshot(collection(db, ad), { includeMetadataChanges: true }, (s) => {
       veri[ad] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       if (ad === "urunKategorileri") { katalogBilgisi = veri[ad].find((k) => k.id === "_katalog") || null; veri[ad] = veri[ad].filter((k) => !k.id.startsWith("_")); }
       yuklendi[ad] = true; hata = "";
@@ -163,7 +165,7 @@ function cizGiris() {
     <main class="giris">
       <img src="icons/icon-192.png" alt="">
       <h1>Alışveriş Listesi</h1>
-      <p>Ortak alışveriş listeniz</p>
+      <p>Ortak alışveriş listeniz</p><p class="soluk" style="font-size:12px">Sürüm ${SURUM}</p>
       <button id="giris">Google ile giriş yap</button>
     </main>`;
   document.getElementById("giris").onclick = girisYap;
@@ -301,7 +303,7 @@ function ekranUrunler() {
     </div>`;
   };
   return `
-    <p class="soluk" style="margin:0 4px 8px">Kategoriye dokununca içindeki ürünler açılır. Ürün eklemek için + düğmesine basın. (${veri.urunler.length} ürün)</p>
+    <p class="soluk" style="margin:0 4px 8px">Sürüm ${SURUM} · Kategoriye dokununca içindeki ürünler açılır. Ürün eklemek için + düğmesine basın. (${veri.urunler.length} ürün)</p>
     ${kats.map((k) => grup(k, veri.urunler.filter((u) => u.kategoriId === k.id))).join("")}
     ${kimsesiz.length ? grup(null, kimsesiz) : ""}
     <button class="ikincil tam" id="kategori-ekle" style="margin-top:14px">+ Yeni kategori</button>`;
