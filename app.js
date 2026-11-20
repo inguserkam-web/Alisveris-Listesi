@@ -39,7 +39,7 @@ const MAGAZA_TURLERI = { market: "Market", pazar: "Pazar", firin: "Fırın", kas
 // ---------- Hazır katalog ----------
 // Katalog sürümü artınca eksik kategori ve ürünler mevcut veritabanına da bir kez eklenir.
 const KATALOG_SURUMU = 2;
-const SURUM = "4";
+const SURUM = "5";
 const VARSAYILAN_KATEGORILER = [
   ["meyve-sebze", "Meyve - Sebze", 0], ["et", "Et - Tavuk - Balık", 1], ["sut", "Süt - Kahvaltılık", 2],
   ["temel", "Temel Gıda", 3], ["baharat", "Baharat - Sos", 3.5], ["unlu", "Unlu Mamul", 4], ["icecek", "İçecek", 5],
@@ -352,7 +352,7 @@ function cizListe(l) {
       <div class="tutar">${k.alindi && sayi(k.fiyat) ? para.format(kalemTutari(k)) : ""}</div>
     </div>`;
   kok.innerHTML = `
-    <header><button id="geri">‹</button><h1>${esc(l.ad)}</h1>${bitti ? "" : `<button id="menu">⋯</button>`}</header>
+    <header><button id="geri">‹</button><h1>${esc(l.ad)}</h1><button id="menu">⋯</button></header>
     <main>
       ${bitti ? `<div class="kart"><span class="rozet">Bitti</span>
           <div class="soluk" style="margin-top:6px">${tarihYaz(l.bitis)}${yer ? " · " + esc(yer) : ""} · ${ODEMELER[l.odeme] || "Nakit"} · ${esc(l.bitiren || "")}</div>
@@ -370,10 +370,10 @@ function cizListe(l) {
     ${bitti ? "" : `<button class="yuzen" id="ekle" aria-label="Ürün ekle">+</button>`}`;
 
   document.getElementById("geri").onclick = () => { acikListeId = null; ciz(); };
+  document.getElementById("menu").onclick = () => listeMenusu(l);
   if (bitti) return;
   const bul = (key) => kalemler.find((k) => k.id === key);
   document.getElementById("ekle").onclick = () => urunSecici(l);
-  document.getElementById("menu").onclick = () => listeMenusu(l);
   const bitir = document.getElementById("bitir");
   if (bitir) bitir.onclick = () => bitirPenceresi(l);
   kok.querySelectorAll("input.kutu").forEach((el) => el.onchange = () => {
@@ -556,8 +556,15 @@ function listeMenusu(l) {
     <h3>Liste ayarları</h3>
     <label>Liste adı</label><input id="ad" value="${esc(l.ad)}">
     <label>Nereden</label>${magazaSec("magaza", l.magazaId)}
-    <div class="dugmeler"><button class="tehlike" id="sil">Listeyi sil</button><button id="tamam">Kaydet</button></div>`,
+    ${l.durum === "bitti" ? `<button class="ikincil tam" id="yeniden" style="margin-top:14px">Alışverişi yeniden aç</button>
+      <div class="soluk" style="margin-top:6px">Yeniden açarsanız ürünleri düzeltip tekrar bitirebilirsiniz. Hesap Defteri'ndeki gider de buna göre güncellenir.</div>` : ""}
+    <div class="dugmeler"><button class="tehlike" id="sil">${l.durum === "bitti" ? "Alışverişi sil" : "Listeyi sil"}</button><button id="tamam">Kaydet</button></div>`,
   (p, kapat) => {
+    const yeniden = p.querySelector("#yeniden");
+    if (yeniden) yeniden.onclick = () => {
+      kapat();
+      updateDoc(doc(db, "alisveris", l.id), { durum: "acik", toplam: deleteField(), bitis: deleteField(), odeme: deleteField(), bitiren: deleteField() }).catch(hataGoster);
+    };
     p.querySelector("#tamam").onclick = () => {
       const ad = p.querySelector("#ad").value.trim() || l.ad;
       const magazaId = p.querySelector("#magaza").value;
@@ -565,7 +572,7 @@ function listeMenusu(l) {
       updateDoc(doc(db, "alisveris", l.id), { ad, magazaId, magazaAd: magazaAdi(magazaId) }).catch(hataGoster);
     };
     p.querySelector("#sil").onclick = async () => {
-      if (!confirm("Bu liste tamamen silinsin mi?")) return;
+      if (!confirm(l.durum === "bitti" ? "Bu alışveriş silinsin mi? Hesap Defteri'ndeki gideri de kaldırılır." : "Bu liste tamamen silinsin mi?")) return;
       kapat(); acikListeId = null; ciz();
       deleteDoc(doc(db, "alisveris", l.id)).catch(hataGoster);
     };
