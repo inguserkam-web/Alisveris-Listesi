@@ -95,3 +95,9 @@ button.kucuk { padding: 5px 10px; font-size: 13px; text-transform: none; letter-
 .cubuk > div { height: 100%; background: var(--ana); border-radius: 99px; }
 .hizli { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
 .hizli button { padding: 10px 4px; font-size: 14px; }
+.akordeon { padding: 0; overflow: hidden; }
+.akordeon-baslik { padding: 14px; cursor: pointer; user-select: none; }
+.akordeon-baslik .ok { width: 16px; color: var(--soluk); }
+.akordeon .tablo { border-top: 1px solid var(--cizgi); }
+.akordeon .cipler { padding: 0 14px 12px; }
+.akordeon.acik .akordeon-baslik { background: #f7faf8; }

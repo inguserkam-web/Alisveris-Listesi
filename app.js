@@ -36,28 +36,58 @@ const BIRIMLER = ["adet", "kg", "gr", "lt", "paket", "kutu", "demet"];
 const ODEMELER = { nakit: "Nakit", banka: "Banka kartı", kredi: "Kredi kartı", kart: "Kart" };
 const MAGAZA_TURLERI = { market: "Market", pazar: "Pazar", firin: "Fırın", kasap: "Kasap", eczane: "Eczane", kirtasiye: "Kırtasiye", diger: "Diğer" };
 
-// ---------- Varsayılan veriler (ilk açılışta bir kez) ----------
+// ---------- Hazır katalog ----------
+// Katalog sürümü artınca eksik kategori ve ürünler mevcut veritabanına da bir kez eklenir.
+const KATALOG_SURUMU = 2;
 const VARSAYILAN_KATEGORILER = [
-  ["meyve-sebze", "Meyve - Sebze"], ["et", "Et - Tavuk - Balık"], ["sut", "Süt - Kahvaltılık"],
-  ["temel", "Temel Gıda"], ["unlu", "Unlu Mamul"], ["icecek", "İçecek"], ["atistirmalik", "Atıştırmalık"],
-  ["temizlik", "Temizlik"], ["bakim", "Kişisel Bakım"], ["kirtasiye", "Kırtasiye - Kitap"],
-  ["bebek", "Bebek"], ["ev", "Ev Eşyası"], ["diger", "Diğer"]
+  ["meyve-sebze", "Meyve - Sebze", 0], ["et", "Et - Tavuk - Balık", 1], ["sut", "Süt - Kahvaltılık", 2],
+  ["temel", "Temel Gıda", 3], ["baharat", "Baharat - Sos", 3.5], ["unlu", "Unlu Mamul", 4], ["icecek", "İçecek", 5],
+  ["atistirmalik", "Atıştırmalık - Kuruyemiş", 6], ["dondurulmus", "Dondurulmuş", 6.5], ["temizlik", "Temizlik", 7],
+  ["mutfak", "Mutfak Gereçleri", 7.5], ["bakim", "Kişisel Bakım", 8], ["saglik", "Sağlık - Eczane", 8.5],
+  ["kirtasiye", "Kırtasiye - Kitap", 9], ["bebek", "Bebek", 10], ["ev", "Ev Eşyası", 11], ["diger", "Diğer", 12]
 ];
+// "Ad:birim" (birim yazılmazsa adet)
 const VARSAYILAN_URUNLER = {
-  "meyve-sebze": [["Elma", "kg"], ["Muz", "kg"], ["Portakal", "kg"], ["Domates", "kg"], ["Salatalık", "kg"], ["Patates", "kg"], ["Soğan", "kg"], ["Biber", "kg"], ["Limon", "kg"], ["Maydanoz", "demet"]],
-  "et": [["Kıyma", "kg"], ["Kuşbaşı", "kg"], ["Tavuk", "kg"], ["Balık", "kg"]],
-  "sut": [["Süt", "lt"], ["Yoğurt", "kg"], ["Beyaz peynir", "kg"], ["Kaşar peyniri", "kg"], ["Yumurta", "adet"], ["Zeytin", "kg"], ["Tereyağı", "paket"], ["Bal", "kutu"], ["Reçel", "kutu"]],
-  "temel": [["Un", "kg"], ["Şeker", "kg"], ["Tuz", "paket"], ["Pirinç", "kg"], ["Bulgur", "kg"], ["Makarna", "paket"], ["Mercimek", "kg"], ["Nohut", "kg"], ["Ayçiçek yağı", "lt"], ["Zeytinyağı", "lt"], ["Salça", "kutu"], ["Çay", "paket"]],
-  "unlu": [["Ekmek", "adet"], ["Simit", "adet"], ["Pide", "adet"]],
-  "icecek": [["Su", "adet"], ["Maden suyu", "adet"], ["Meyve suyu", "lt"]],
-  "atistirmalik": [["Bisküvi", "paket"], ["Kuruyemiş", "kg"]],
-  "temizlik": [["Çamaşır deterjanı", "adet"], ["Bulaşık deterjanı", "adet"], ["Bulaşık makinesi tableti", "paket"], ["Yüzey temizleyici", "adet"], ["Çamaşır suyu", "adet"], ["Tuvalet kağıdı", "paket"], ["Kağıt havlu", "paket"], ["Çöp poşeti", "paket"]],
-  "bakim": [["Diş macunu", "adet"], ["Şampuan", "adet"], ["Sabun", "adet"], ["Diş fırçası", "adet"]],
-  "kirtasiye": [["Defter", "adet"], ["Kalem", "adet"], ["Kitap", "adet"], ["Silgi", "adet"]],
-  "bebek": [["Bebek bezi", "paket"], ["Islak mendil", "paket"]],
-  "ev": [["Ampul", "adet"], ["Pil", "paket"]],
+  "meyve-sebze": ["Elma:kg", "Armut:kg", "Muz:kg", "Portakal:kg", "Mandalina:kg", "Limon:kg", "Greyfurt:kg", "Nar:kg", "Ayva:kg", "Kivi:kg",
+    "Üzüm:kg", "Çilek:kg", "Kiraz:kg", "Şeftali:kg", "Kayısı:kg", "Erik:kg", "İncir:kg", "Karpuz", "Kavun",
+    "Domates:kg", "Salatalık:kg", "Biber:kg", "Dolmalık biber:kg", "Kapya biber:kg", "Patlıcan:kg", "Kabak:kg", "Patates:kg",
+    "Soğan:kg", "Kuru soğan (file):paket", "Sarımsak:kg", "Taze soğan:demet", "Havuç:kg", "Ispanak:kg", "Pırasa:kg", "Lahana",
+    "Karnabahar", "Brokoli", "Marul", "Kıvırcık", "Roka:demet", "Maydanoz:demet", "Dereotu:demet", "Nane:demet",
+    "Taze fasulye:kg", "Bezelye:kg", "Mantar:paket", "Turp:kg", "Kereviz:kg", "Pancar:kg", "Mısır"],
+  "et": ["Kıyma:kg", "Kuşbaşı:kg", "Antrikot:kg", "Biftek:kg", "Kuzu pirzola:kg", "Kuzu eti:kg", "Kemikli et:kg", "Ciğer:kg",
+    "Tavuk:kg", "Tavuk göğsü:kg", "Tavuk but:kg", "Tavuk kanat:kg", "Tavuk baget:kg", "Hazır köfte:kg",
+    "Sucuk:paket", "Pastırma:paket", "Salam:paket", "Sosis:paket", "Kavurma:paket",
+    "Balık:kg", "Hamsi:kg", "Levrek:kg", "Çipura:kg", "Somon:kg", "Mezgit:kg"],
+  "sut": ["Süt:lt", "Ayran:lt", "Kefir:lt", "Yoğurt:kg", "Süzme yoğurt:kg", "Beyaz peynir:kg", "Kaşar peyniri:kg", "Tulum peyniri:kg",
+    "Lor peyniri:kg", "Labne:kutu", "Krem peynir:kutu", "Tereyağı:paket", "Margarin:paket", "Kaymak:kutu", "Krema:kutu", "Yumurta",
+    "Zeytin:kg", "Siyah zeytin:kg", "Yeşil zeytin:kg", "Bal:kutu", "Reçel:kutu", "Pekmez:kutu", "Tahin:kutu", "Helva:kutu", "Fındık ezmesi:kutu"],
+  "temel": ["Un:kg", "Şeker:kg", "Küp şeker:paket", "Tuz:paket", "Pirinç:kg", "Bulgur:kg", "Makarna:paket", "Erişte:paket", "Şehriye:paket",
+    "Mercimek:kg", "Yeşil mercimek:kg", "Nohut:kg", "Kuru fasulye:kg", "Barbunya:kg", "Ayçiçek yağı:lt", "Zeytinyağı:lt", "Mısırözü yağı:lt",
+    "Salça:kutu", "Biber salçası:kutu", "Çay:paket", "Türk kahvesi:paket", "Hazır kahve:paket", "İrmik:paket", "Nişasta:paket", "Yulaf:paket",
+    "Mısır gevreği:paket", "Ton balığı konservesi", "Konserve mısır", "Turşu:kutu", "Hazır çorba:paket", "Kuru maya:paket", "Kabartma tozu:paket",
+    "Vanilin:paket", "Sirke:lt", "Kakao:paket", "Pudra şekeri:paket"],
+  "baharat": ["Karabiber:paket", "Pul biber:paket", "Toz kırmızı biber:paket", "Kimyon:paket", "Kuru nane:paket", "Kekik:paket", "Sumak:paket",
+    "Zerdeçal:paket", "Tarçın:paket", "Köri:paket", "Ketçap", "Mayonez", "Hardal", "Nar ekşisi", "Soya sosu", "Limon sosu"],
+  "unlu": ["Ekmek", "Tam buğday ekmeği", "Kepekli ekmek", "Lavaş:paket", "Bazlama", "Simit", "Pide", "Poğaça", "Açma", "Yufka:paket",
+    "Galeta:paket", "Kek", "Pasta", "Baklava:kg"],
+  "icecek": ["Su", "Damacana su", "Maden suyu", "Meyve suyu:lt", "Gazlı içecek:lt", "Şalgam:lt", "Soğuk çay:lt", "Limonata:lt", "Bitki çayı:paket", "Boza:lt"],
+  "atistirmalik": ["Bisküvi:paket", "Kraker:paket", "Çikolata", "Gofret", "Cips:paket", "Kuruyemiş:kg", "Fındık:kg", "Ceviz:kg", "Badem:kg",
+    "Antep fıstığı:kg", "Leblebi:kg", "Çekirdek:kg", "Kuru üzüm:kg", "Kuru kayısı:kg", "Kuru incir:kg", "Hurma:kg", "Lokum:kutu", "Sakız:paket"],
+  "dondurulmus": ["Dondurulmuş sebze:paket", "Dondurulmuş patates:paket", "Mantı:paket", "Pizza", "Milföy hamuru:paket", "Dondurma"],
+  "temizlik": ["Çamaşır deterjanı", "Sıvı çamaşır deterjanı", "Yumuşatıcı", "Leke çıkarıcı", "Bulaşık deterjanı", "Bulaşık makinesi tableti:paket",
+    "Parlatıcı", "Makine tuzu:paket", "Yüzey temizleyici", "Çamaşır suyu", "Cam temizleyici", "Kireç çözücü", "Tuvalet kağıdı:paket",
+    "Kağıt havlu:paket", "Peçete:paket", "Çöp poşeti:paket", "Bulaşık süngeri:paket", "Temizlik bezi:paket", "Eldiven:paket", "Oda spreyi", "Böcek ilacı"],
+  "mutfak": ["Alüminyum folyo", "Streç film", "Pişirme kağıdı", "Buzdolabı poşeti:paket", "Kibrit:paket", "Çakmak", "Mum:paket", "Kürdan:paket"],
+  "bakim": ["Diş macunu", "Diş fırçası", "Şampuan", "Saç kremi", "Duş jeli", "Sabun", "Sıvı sabun", "Deodorant", "Tıraş bıçağı:paket",
+    "Tıraş köpüğü", "Kolonya", "Pamuk:paket", "Kulak çubuğu:paket", "Hijyenik ped:paket", "El kremi", "Misvak"],
+  "saglik": ["Ağrı kesici:kutu", "Yara bandı:kutu", "Vitamin:kutu", "Maske:paket", "El dezenfektanı", "Termometre"],
+  "kirtasiye": ["Defter", "Kalem", "Kurşun kalem", "Tükenmez kalem", "Silgi", "Kalemtıraş", "Boya kalemi:kutu", "Pastel boya:kutu", "Cetvel",
+    "Yapıştırıcı", "Makas", "A4 kağıt:paket", "Dosya", "Kitap", "Ajanda"],
+  "bebek": ["Bebek bezi:paket", "Islak mendil:paket", "Mama:kutu", "Bebek şampuanı", "Pişik kremi", "Biberon", "Emzik"],
+  "ev": ["Ampul", "Pil:paket", "Uzatma kablosu", "Koli bandı", "Askı:paket", "Mutfak havlusu", "Paspas"],
   "diger": []
 };
+const urunKimligi = (kat, ad) => "v_" + kat + "_" + kucuk(ad).replace(/[^a-z0-9çğıöşü]+/g, "-");
 
 let kullanici = null;
 let veri = { alisveris: [], urunKategorileri: [], urunler: [], magazalar: [] };
@@ -69,6 +99,8 @@ let hata = "";
 let dinleyiciler = [];
 let tohumlandi = false;
 let sunucudan = {};
+let katalogBilgisi = null;
+const acikKategoriler = new Set();
 
 // ---------- Giriş ----------
 onAuthStateChanged(auth, (u) => {
@@ -80,6 +112,7 @@ onAuthStateChanged(auth, (u) => {
   for (const ad of Object.keys(veri)) {
     dinleyiciler.push(onSnapshot(collection(db, ad), (s) => {
       veri[ad] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (ad === "urunKategorileri") { katalogBilgisi = veri[ad].find((k) => k.id === "_katalog") || null; veri[ad] = veri[ad].filter((k) => !k.id.startsWith("_")); }
       yuklendi[ad] = true; hata = "";
       if (!s.metadata?.fromCache) sunucudan[ad] = true; // önbellekten gelen boş liste yanıltmasın
       tohumla(); ciz();
@@ -96,12 +129,18 @@ onAuthStateChanged(auth, (u) => {
 function tohumla() {
   if (tohumlandi || !sunucudan.urunKategorileri || !sunucudan.urunler || !sunucudan.magazalar) return;
   tohumlandi = true;
-  if (!veri.urunKategorileri.length && !veri.urunler.length) {
-    VARSAYILAN_KATEGORILER.forEach(([id, ad], i) => {
-      setDoc(doc(db, "urunKategorileri", id), { ad, sira: i }).catch(() => {});
-      (VARSAYILAN_URUNLER[id] || []).forEach(([uad, birim]) =>
-        setDoc(doc(db, "urunler", "v_" + id + "_" + kucuk(uad).replace(/[^a-z0-9çğıöşü]+/g, "-")), { ad: uad, kategoriId: id, birim }).catch(() => {}));
-    });
+  if ((katalogBilgisi?.surum || 0) < KATALOG_SURUMU) {
+    const kVar = new Set(veri.urunKategorileri.map((k) => k.id));
+    const uVar = new Set(veri.urunler.map((u) => u.id));
+    for (const [id, ad, sira] of VARSAYILAN_KATEGORILER) {
+      if (!kVar.has(id)) setDoc(doc(db, "urunKategorileri", id), { ad, sira }).catch(() => {});
+      for (const x of VARSAYILAN_URUNLER[id] || []) {
+        const [uad, birim = "adet"] = x.split(":");
+        const uid = urunKimligi(id, uad);
+        if (!uVar.has(uid)) setDoc(doc(db, "urunler", uid), { ad: uad, kategoriId: id, birim }).catch(() => {});
+      }
+    }
+    setDoc(doc(db, "urunKategorileri", "_katalog"), { surum: KATALOG_SURUMU }).catch(() => {});
   }
   if (!veri.magazalar.length) setDoc(doc(db, "magazalar", "pazar"), { ad: "Pazar yeri", tur: "pazar" }).catch(() => {});
 }
@@ -201,7 +240,12 @@ function ciz() {
   if (yeni) yeni.onclick = () => sekme === "listeler" ? yeniListe() : sekme === "urunler" ? urunPenceresi(null) : magazaPenceresi(null);
   kok.querySelectorAll("[data-liste]").forEach((el) => el.onclick = () => { acikListeId = el.dataset.liste; ciz(); window.scrollTo(0, 0); });
   kok.querySelectorAll("[data-urun]").forEach((el) => el.onclick = () => urunPenceresi(urun(el.dataset.urun)));
-  kok.querySelectorAll("[data-kategori]").forEach((el) => el.onclick = () => kategoriPenceresi(veri.urunKategorileri.find((k) => k.id === el.dataset.kategori)));
+  kok.querySelectorAll("[data-ac]").forEach((el) => el.onclick = () => {
+    const id = el.dataset.ac;
+    acikKategoriler.has(id) ? acikKategoriler.delete(id) : acikKategoriler.add(id);
+    ciz();
+  });
+  kok.querySelectorAll("[data-kategori]").forEach((el) => el.onclick = (e) => e.stopPropagation() || kategoriPenceresi(veri.urunKategorileri.find((k) => k.id === el.dataset.kategori)));
   kok.querySelectorAll("[data-magaza]").forEach((el) => el.onclick = () => magazaPenceresi(veri.magazalar.find((m) => m.id === el.dataset.magaza)));
   const kEkle = document.getElementById("kategori-ekle");
   if (kEkle) kEkle.onclick = () => kategoriPenceresi(null);
@@ -237,16 +281,27 @@ function ekranListeler() {
 function ekranUrunler() {
   const kats = kategoriler();
   const kimsesiz = veri.urunler.filter((u) => !veri.urunKategorileri.some((k) => k.id === u.kategoriId));
-  const grup = (k, liste) => `
-    <h2 class="satir"><span class="esnek">${esc(k ? k.ad : "Kategorisiz")}</span>${k ? `<button class="ikincil kucuk" data-kategori="${k.id}">Düzenle</button>` : ""}</h2>
-    ${liste.length ? `<div class="kart tablo">${liste.sort(sirala).map((u) => `
+  const grup = (k, liste) => {
+    const kid = k ? k.id : "_yok";
+    const acik = acikKategoriler.has(kid);
+    return `
+    <div class="kart akordeon ${acik ? "acik" : ""}">
+      <div class="satir akordeon-baslik" data-ac="${kid}">
+        <span class="ok">${acik ? "▾" : "▸"}</span>
+        <span class="esnek kalin">${esc(k ? k.ad : "Kategorisiz")}</span>
+        <span class="soluk">${liste.length}</span>
+        ${k && acik ? `<button class="ikincil kucuk" data-kategori="${k.id}">Düzenle</button>` : ""}
+      </div>
+    ${!acik ? "" : liste.length ? `<div class="tablo">${liste.sort(sirala).map((u) => `
       <div class="satir liste-ogesi" data-urun="${u.id}">
         <div class="esnek"><div>${esc(u.ad)}</div>
           ${u.sonFiyat ? `<div class="soluk">Son: ${para.format(u.sonFiyat)}/${esc(u.birim || "adet")}${u.sonMagaza ? " · " + esc(u.sonMagaza) : ""}</div>` : ""}</div>
         <span class="soluk">${esc(u.birim || "adet")}</span>
-      </div>`).join("")}</div>` : `<div class="soluk" style="padding:0 6px 6px">Bu kategoride ürün yok.</div>`}`;
+      </div>`).join("")}</div>` : `<div class="soluk" style="padding:8px 2px 4px">Bu kategoride ürün yok.</div>`}
+    </div>`;
+  };
   return `
-    <p class="soluk" style="margin:0 4px 6px">Kategoriler genel listedir, altındakiler ayrıntılı ürünlerdir. Ürün eklemek için + düğmesine basın.</p>
+    <p class="soluk" style="margin:0 4px 8px">Kategoriye dokununca içindeki ürünler açılır. Ürün eklemek için + düğmesine basın. (${veri.urunler.length} ürün)</p>
     ${kats.map((k) => grup(k, veri.urunler.filter((u) => u.kategoriId === k.id))).join("")}
     ${kimsesiz.length ? grup(null, kimsesiz) : ""}
     <button class="ikincil tam" id="kategori-ekle" style="margin-top:14px">+ Yeni kategori</button>`;
@@ -360,6 +415,7 @@ function magazaSec(id, secili, bosYazi = "Henüz belli değil") {
 // Katalogdan ürün seçme: aranır, dokununca listeye eklenir, pencere açık kalır.
 function urunSecici(l) {
   let aranan = "";
+  const secAcik = new Set();
   pencere(`
     <div class="satir"><h3 class="esnek">Ürün ekle</h3><button class="ikincil" data-kapat>Bitti</button></div>
     <input id="ara" placeholder="Ürün ara ya da yeni ürün yaz" autocomplete="off" style="margin-top:10px">
@@ -373,16 +429,25 @@ function urunSecici(l) {
       const uygun = veri.urunler.filter((u) => !q || kucuk(u.ad).includes(q));
       const tamEslesme = veri.urunler.some((u) => kucuk(u.ad) === q);
       let html = "";
-      if (q && !tamEslesme) html += `<button class="tam" id="yeni-urun" style="margin-bottom:10px">+ “${esc(aranan.trim())}” yeni ürün olarak ekle</button>`;
+
       for (const k of kategoriler()) {
         const us = uygun.filter((u) => u.kategoriId === k.id).sort(sirala);
         if (!us.length) continue;
-        html += `<div class="grup-baslik">${esc(k.ad)}</div><div class="cipler">${us.map((u) =>
-          `<button class="cip ${varIds.has(u.id) ? "secili" : ""}" data-u="${u.id}">${varIds.has(u.id) ? "✓ " : ""}${esc(u.ad)}</button>`).join("")}</div>`;
+        const acik = q || secAcik.has(k.id);
+        const secilen = us.filter((u) => varIds.has(u.id)).length;
+        html += `<div class="kart akordeon ${acik ? "acik" : ""}">
+          <div class="satir akordeon-baslik" data-sac="${k.id}"><span class="ok">${acik ? "▾" : "▸"}</span>
+            <span class="esnek kalin">${esc(k.ad)}</span>${secilen ? `<span class="rozet">${secilen} seçili</span>` : ""}<span class="soluk">${us.length}</span></div>
+          ${acik ? `<div class="cipler" style="margin-top:10px">${us.map((u) =>
+          `<button class="cip ${varIds.has(u.id) ? "secili" : ""}" data-u="${u.id}">${varIds.has(u.id) ? "✓ " : ""}${esc(u.ad)}</button>`).join("")}</div>` : ""}</div>`;
       }
+      if (q && !tamEslesme) html += `<button class="${html ? "ikincil " : ""}tam" id="yeni-urun" style="margin-top:6px">+ “${esc(aranan.trim())}” yeni ürün olarak ekle</button>`;
       if (!html) html = `<div class="bos">Ürün bulunamadı.</div>`;
       const sonuc = p.querySelector("#sonuc");
       sonuc.innerHTML = html;
+      sonuc.querySelectorAll("[data-sac]").forEach((el) => el.onclick = () => {
+        const id = el.dataset.sac; secAcik.has(id) ? secAcik.delete(id) : secAcik.add(id); yaz();
+      });
       sonuc.querySelectorAll("[data-u]").forEach((b) => b.onclick = () => {
         const u = urun(b.dataset.u);
         const var_ = mevcut().find((x) => x.urunId === u.id && !x.alindi);
